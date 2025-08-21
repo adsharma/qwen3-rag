@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qwen3-rag-system"
+version = "0.1.0"
+description = "A RAG system implementation with Qwen3"
+authors = [
+    {name = "Author Name", email = "author@example.com"},
+]
+readme = "README.md"
+license = {text = "MIT"}
+dependencies = [
+    "faiss-cpu",
+    "PyPDF2",
+    "transformers",
+    "torch",
+    "numpy",
+    "litellm[proxy]",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0",
+    "black",
+    "flake8",
+]

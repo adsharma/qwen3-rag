@@ -6,8 +6,8 @@ A complete Retrieval-Augmented Generation (RAG) system using Qwen3 models, optim
 
 - **Multi-model RAG pipeline** with three specialized Qwen3 models:
   - `Qwen3-Embedding-0.6B` for document embeddings
-  - `Qwen3-Reranker-0.6B` for document reranking  
-  - `Qwen3-4B-Instruct-2507` for answer generation
+  - `Qwen3-Reranker-0.6B` for document reranking
+  - `qwen3:0.6b` (local Ollama model) for answer generation
 - **Memory optimized** for Colab T4 (15GB VRAM) with automatic model loading/unloading
 - **FAISS vector store** for efficient similarity search
 - **Document processing** supports PDF and TXT files
@@ -70,7 +70,7 @@ Open `Qwen3_RAG_Notebook.ipynb` in Google Colab or Jupyter:
 ### 3. RAG Pipeline
 1. **Retrieval**: Search top-15 similar documents using FAISS
 2. **Reranking**: Rerank to top-3 using `Qwen3-Reranker-0.6B`
-3. **Generation**: Generate answer using `Qwen3-4B-Instruct-2507`
+3. **Generation**: Generate answer using `qwen3:0.6b` (local Ollama model)
 
 ### 4. Memory Management
 - Automatic model loading/unloading between steps
@@ -83,7 +83,7 @@ Open `Qwen3_RAG_Notebook.ipynb` in Google Colab or Jupyter:
 |-------|-------|------------|
 | Embedding | Qwen3-Embedding-0.6B | ~1.2GB |
 | Reranking | Qwen3-Reranker-0.6B | ~1.2GB |
-| Generation | Qwen3-4B-Instruct | ~8.1GB |
+| Generation | qwen3:0.6b (Ollama) | ~0.5GB (runs locally) |
 
 ## 🔍 Customization
 
