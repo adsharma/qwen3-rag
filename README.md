@@ -1,6 +1,6 @@
 # Qwen3 RAG System
 
-A complete Retrieval-Augmented Generation (RAG) system using Qwen3 models, optimized for Google Colab T4 GPU with memory-efficient model loading/unloading.
+A complete Retrieval-Augmented Generation (RAG) system using Qwen3 models
 
 ## 🚀 Features
 
@@ -17,18 +17,7 @@ A complete Retrieval-Augmented Generation (RAG) system using Qwen3 models, optim
 ## 📋 Requirements
 
 ```bash
-pip install faiss-cpu PyPDF2 transformers torch numpy
-```
-
-## 🏗️ Project Structure
-
-```
-├── qwen_rag.py              # Main RAG system implementation
-├── Qwen3_RAG_Notebook.ipynb # Jupyter notebook interface
-├── Data/                    # Document folder (PDFs and TXT files)
-├── vector_store.faiss       # FAISS index (auto-generated)
-├── vector_store_docs.pkl    # Document metadata (auto-generated)
-└── rag_retrieval_log.txt    # Detailed retrieval logs (auto-generated)
+uv sync
 ```
 
 ## 🚀 Quick Start
@@ -39,7 +28,7 @@ pip install faiss-cpu PyPDF2 transformers torch numpy
 
 2. **Run the RAG system**:
 ```bash
-python qwen_rag.py
+uv run python qwen_rag.py
 ```
 
 The system will:
