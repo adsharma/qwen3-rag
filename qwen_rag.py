@@ -88,8 +88,11 @@ def process_documents(data_folder):
 
 
 def generate_embeddings(documents):
-    """Generate embeddings for documents using Ollama"""
-    print("Generating embeddings with LiteLLM...")
+    """Generate embeddings for documents"""
+    if args.vllm_embedder:
+        print(f"Generating embeddings with vLLM at {args.vllm_embedder}...")
+    else:
+        print("Generating embeddings with LiteLLM...")
 
     embeddings = []
     batch_size = 4
@@ -101,15 +104,37 @@ def generate_embeddings(documents):
             for doc in batch_docs
         ]
 
-        # Generate embeddings using LiteLLM
-        batch_embeddings = []
-        for text in texts:
-            response = litellm.embedding(
-                model=args.embedding_model, input=text, api_base=api_base
-            )
-            batch_embeddings.append(response["data"][0]["embedding"])
+        if args.vllm_embedder:
+            # Generate embeddings using vLLM embedder API
+            try:
+                embedding_data = {"input": texts, "model": args.embedding_model}
 
-        embeddings.extend(batch_embeddings)
+                headers = {"Content-Type": "application/json"}
+                response = requests.post(
+                    f"{args.vllm_embedder}/v1/embeddings",
+                    headers=headers,
+                    json=embedding_data,
+                    timeout=30,
+                )
+                response.raise_for_status()
+
+                result = response.json()
+                batch_embeddings = [item["embedding"] for item in result["data"]]
+                embeddings.extend(batch_embeddings)
+
+            except Exception as e:
+                print(f"Error calling vLLM embedder: {e}")
+                raise
+        else:
+            # Generate embeddings using LiteLLM
+            batch_embeddings = []
+            for text in texts:
+                response = litellm.embedding(
+                    model=args.embedding_model, input=text, api_base=api_base
+                )
+                batch_embeddings.append(response["data"][0]["embedding"])
+
+            embeddings.extend(batch_embeddings)
 
     print("Embeddings generated!")
     return np.array(embeddings)
@@ -147,18 +172,100 @@ def load_vector_store(save_path="vector_store"):
     return None, None
 
 
+def search_documents_vllm(query, index, documents, vllm_url, k=15):
+    """Search for relevant documents using vLLM embeddings"""
+    print("Searching documents with vLLM embedder...")
+
+    # Generate query embedding using vLLM
+    query_text = f"Instruct: Given a web search query, retrieve relevant passages that answer the query\nQuery: {query}"
+
+    try:
+        embedding_data = {"input": [query_text], "model": args.embedding_model}
+
+        headers = {"Content-Type": "application/json"}
+        response = requests.post(
+            f"{vllm_url}/v1/embeddings",
+            headers=headers,
+            json=embedding_data,
+            timeout=30,
+        )
+        response.raise_for_status()
+
+        result = response.json()
+        query_embedding = (
+            np.array(result["data"][0]["embedding"]).astype("float32").reshape(1, -1)
+        )
+
+    except Exception as e:
+        print(f"Error calling vLLM embedder: {e}")
+        raise
+
+    print("Query embedding generated")
+
+    # Search
+    similarities, indices = index.search(query_embedding, k)
+
+    results = []
+    for similarity, idx in zip(similarities[0], indices[0]):
+        if idx < len(documents):
+            results.append((documents[idx], float(similarity)))
+
+    # Log retrieved documents
+    with open("rag_retrieval_log.txt", "w", encoding="utf-8") as f:
+        f.write(f"=== DOCUMENT RETRIEVAL LOG ===\n")
+        f.write(f"Query: {query}\n")
+        f.write(f"vLLM Embedder URL: {vllm_url}\n")
+        f.write(f"Retrieved {len(results)} documents\n\n")
+
+        for i, (doc, similarity) in enumerate(results):
+            f.write(f"--- Document {i+1} ---\n")
+            f.write(f"Source: {doc['source']}\n")
+            f.write(f"Chunk ID: {doc['chunk_id']}\n")
+            f.write(f"Similarity Score: {similarity:.4f}\n")
+            f.write(f"Content: {doc['content'][:200]}...\n\n")
+
+    return results
+
+
 def search_documents(query, index, documents, k=15):
-    """Search for relevant documents using Ollama embeddings"""
+    """Search for relevant documents using embeddings"""
     print("Searching documents...")
 
-    # Generate query embedding using LiteLLM
+    # Generate query embedding
     query_text = f"Instruct: Given a web search query, retrieve relevant passages that answer the query\nQuery: {query}"
-    response = litellm.embedding(
-        model=args.embedding_model, input=query_text, api_base=api_base
-    )
-    query_embedding = (
-        np.array(response["data"][0]["embedding"]).astype("float32").reshape(1, -1)
-    )
+
+    if args.vllm_embedder:
+        # Use vLLM embedder API
+        try:
+            embedding_data = {"input": [query_text], "model": args.embedding_model}
+
+            headers = {"Content-Type": "application/json"}
+            response = requests.post(
+                f"{args.vllm_embedder}/v1/embeddings",
+                headers=headers,
+                json=embedding_data,
+                timeout=30,
+            )
+            response.raise_for_status()
+
+            result = response.json()
+            query_embedding = (
+                np.array(result["data"][0]["embedding"])
+                .astype("float32")
+                .reshape(1, -1)
+            )
+
+        except Exception as e:
+            print(f"Error calling vLLM embedder: {e}")
+            raise
+    else:
+        # Use LiteLLM
+        response = litellm.embedding(
+            model=args.embedding_model, input=query_text, api_base=api_base
+        )
+        query_embedding = (
+            np.array(response["data"][0]["embedding"]).astype("float32").reshape(1, -1)
+        )
 
     print("Query embedding generated")
 
@@ -225,7 +332,7 @@ def rerank_documents_vllm(query, candidates, vllm_url, k_rerank=3):
         response.raise_for_status()
 
         result = response.json()
-        scores = result.get("scores", [])
+        scores = [item["relevance_score"] for item in result["results"]]
 
         if len(scores) != len(candidates):
             raise ValueError(f"Expected {len(candidates)} scores, got {len(scores)}")
@@ -419,6 +526,12 @@ def main():
         default=None,
         help="vLLM reranker URL (e.g., http://localhost:8000). When specified, bypasses local reranker.",
     )
+    parser.add_argument(
+        "--vllm-embedder",
+        type=str,
+        default=None,
+        help="vLLM embedder URL (e.g., http://localhost:8001). When specified, uses vLLM for embeddings instead of LiteLLM.",
+    )
     args = parser.parse_args()
 
     print("=== Simple Qwen3 RAG System ===")
@@ -439,7 +552,12 @@ def main():
     print(f"\nQuery: {question}")
 
     # Step 1: Search
-    candidates = search_documents(question, index, documents, k=args.top_k)
+    if args.vllm_embedder:
+        candidates = search_documents_vllm(
+            question, index, documents, args.vllm_embedder, k=args.top_k
+        )
+    else:
+        candidates = search_documents(question, index, documents, k=args.top_k)
     print(f"Found {len(candidates)} candidates")
 
     # Step 2: Rerank
